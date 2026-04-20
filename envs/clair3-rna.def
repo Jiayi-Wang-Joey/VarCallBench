@@ -1,0 +1,20 @@
+Bootstrap: localimage
+From: /home/jiayiwang/tools/clair3-rna-latest.simg
+
+%post
+    mkdir -p /opt/py312
+    cd /opt/py312
+    wget -O Miniconda3.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+    bash Miniconda3.sh -b -p /opt/py312/conda
+    rm -f Miniconda3.sh
+    /opt/py312/conda/bin/conda install -y python=3.12
+    ln -sf /opt/py312/conda/bin/python3.12 /usr/local/bin/python
+    ln -sf /opt/py312/conda/bin/python3.12 /usr/local/bin/python3
+
+%environment
+    export PATH=/usr/local/bin:/opt/conda/bin:/opt/conda/envs/clair3_rna/bin:/opt/bin:/usr/bin:/bin:$PATH
+
+%runscript
+    exec "$@"
+
+    

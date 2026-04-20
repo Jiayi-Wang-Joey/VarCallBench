@@ -1,0 +1,299 @@
+id: VarCallbench_apptainer
+description: Benchmarking variant calling and phasing using LongBench
+version: "0.1"
+benchmarker: "Jiayi Wang"
+benchmark_yaml_spec: "0.01"
+software_backend: apptainer
+
+software_environments:
+  downloader:
+    description: "Download environment"
+    apptainer: "/home/jiayiwang/VarCallbench/envs/awscli_python.sif"
+  
+  minimap2_env:
+    description: "minimap2 + samtools"
+    apptainer: "/home/jiayiwang/VarCallbench/envs/minimap2.sif"
+  
+  clair3_rna_env:
+    description: "Clair3-RNA"
+    apptainer: "/home/jiayiwang/VarCallbench/envs/clair3_rna.sif"
+  
+  deepvariant_env:
+    description: "DeepVariant"
+    apptainer: "/home/jiayiwang/VarCallbench/envs/deepvariant.sif"
+
+  longcallR_env:
+    description: "longcallR"
+    apptainer: "/home/jiayiwang/VarCallbench/envs/longcallR.sif"
+  
+  longcallR_nn_env:
+    description: "longcallR-nn"
+    apptainer: "/home/jiayiwang/VarCallbench/envs/longcallR_nn.sif"
+  
+  gnomad_detection_env: 
+    description: "gnomAD detection rate"
+    apptainer: "/home/jiayiwang/VarCallbench/envs/gnomad_detection.sif"
+  
+  r_plot_env:
+    description: "R plot"
+    apptainer: "/home/jiayiwang/VarCallbench/envs/r_plot.sif"
+
+
+stages:
+  - id: rawdata
+    modules:
+      - id: H211_bulk_PB
+        name: "H211_bulk_PB"
+        software_environment: downloader
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          commit: "main"
+        parameters:
+          - values: ["--s3_url", "s3://longbench-data/raw/fastq/H211_bulk_PB.fastq.gz"]
+
+      - id: H211_bulk_ONT
+        name: "H211_bulk_ONT"
+        software_environment: downloader
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          commit: "main"
+        parameters:
+          - values: ["--s3_url", "s3://longbench-data/raw/fastq/H211_bulk_ONT.fastq.gz"]
+
+
+      - id: H211_dRNA_ONT
+        name: "H211_dRNA_ONT"
+        software_environment: downloader
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          commit: "main"
+        parameters:
+          - values: ["--s3_url", "s3://longbench-data/raw/fastq/H211_bulk_ONT.fastq.gz"]
+
+
+      - id: H526_bulk_PB
+        name: "H526_bulk_PB"
+        software_environment: downloader
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          commit: "main"
+        parameters:
+          - values: ["--s3_url", "s3://longbench-data/raw/fastq/H526_bulk_PB.fastq.gz"]
+
+      - id: H526_bulk_ONT
+        name: "H526_bulk_ONT"
+        software_environment: downloader
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          commit: "main"
+        parameters:
+          - values: ["--s3_url", "s3://longbench-data/raw/fastq/H526_bulk_ONT.fastq.gz"]
+
+
+      - id: H526_dRNA_ONT
+        name: "H526_dRNA_ONT"
+        software_environment: downloader
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          commit: "main"
+        parameters:
+          - values: ["--s3_url", "s3://longbench-data/raw/fastq/H526_dRNA_ONT.fastq.gz"]
+
+    outputs:
+      - id: rawdata.fastq
+        path: "{dataset}.fastq.gz"
+
+  - id: align
+    modules:
+      - id: minimap2
+        name: "minimap2"
+        software_environment: minimap2_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          commit: "main"
+        parameters:
+          - values: [
+              "--task", "align",
+              "--reference_genome", "/home/jiayiwang/VarCallbench/data/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta",
+              "--transcriptome_bed", "/home/jiayiwang/VarCallbench/data/genome/gencode.v47.chr_patch_hapl_scaff.annotation.bed",
+              "--align_map_bam_threads", "8",
+              "--align_sort_bam_threads", "4",
+              "--align_sort_bam_memory_gb", "4"
+            ]
+    inputs: ["rawdata.fastq"]
+    outputs:
+      - id: align.bam
+        path: "{dataset}.aligned.bam"
+
+  - id: alignment_qc
+    modules:
+      - id: alignment_qc
+        name: "Alignment QC"
+        software_environment: minimap2_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          commit: "main"
+        parameters:
+          - values:
+              - "--task"
+              - "alignment_qc"
+              - "--threads"
+              - "10"
+    inputs: ["align.bam"]
+    outputs:
+      - id: alignment_qc.csv
+        path: "{dataset}.alignment_qc.csv"
+
+  - id: variant_call
+    modules:
+      - id: clair3_rna
+        name: "Clair3-RNA"
+        software_environment: clair3_rna_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          commit: "main"
+        parameters:
+          - values:
+              - "--task"
+              - "clair3_rna"
+              - "--reference_genome"
+              - "/home/jiayiwang/VarCallbench/data/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta"
+              - "--threads"
+              - "10"
+
+      - id: deep_variant
+        name: "DeepVariant"
+        software_environment: deepvariant_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          commit: "main"
+        parameters:
+          - values:
+              - "--task"
+              - "deep_variant"
+              - "--reference_genome"
+              - "/home/jiayiwang/VarCallbench/data/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta"
+              - "--threads"
+              - "10"
+
+      - id: longcallR
+        name: "longcallR"
+        software_environment: longcallR_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          commit: "main"
+        parameters:
+          - values:
+              - "--task"
+              - "longcallR"
+              - "--reference_genome"
+              - "/home/jiayiwang/VarCallbench/data/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta"
+              - "--threads"
+              - "10"
+        
+      - id: longcallR_nn
+        name: "longcallR-nn"
+        software_environment: longcallR_nn_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          commit: "main"
+        parameters:
+          - values:
+              - "--task"
+              - "longcallR_nn"
+              - "--reference_genome"
+              - "/home/jiayiwang/VarCallbench/data/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta"
+              - "--threads"
+              - "10"
+
+
+    inputs: ["align.bam"]
+    outputs:
+      - id: variant.vcf
+        path: "{dataset}.vcf.gz"
+
+
+  - id: somatic_detection
+    modules:
+      - id: somatic_detection
+        name: "Somatic detection"
+        software_environment: gnomad_detection_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          commit: "main"
+        parameters:
+          - values:
+              - "--task"
+              - "somatic_detection"
+              - "--somatic_dir"
+              - "/home/jiayiwang/VarCallbench/data/somatic"
+              - "--exon_bed"
+              - "/home/jiayiwang/VarCallbench/data/genome/exons.bed"
+    inputs: ["variant.vcf"]
+    outputs:
+      - id: somatic_detection.csv
+        path: "{dataset}.somatic_detection.csv"
+
+
+  - id: filter_variants
+    modules:
+      - id: filter_variants
+        name: "Filter variants"
+        software_environment: gnomad_detection_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          commit: "main"
+        parameters:
+          - values:
+              - "--task"
+              - "filter_variants"
+              - "--annotation_bed"
+              - "/home/jiayiwang/VarCallbench/data/genome/gencode.v47.chr_patch_hapl_scaff.annotation.bed"
+    inputs: ["variant.vcf"]
+    outputs:
+      - id: filtered.vcf
+        path: "{dataset}.vcf.gz"
+
+  
+
+
+metric_collectors:
+  - id: upset_collector
+    name: "UpSet"
+    software_environment: r_plot_env
+    repository:
+      url: https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench
+      commit: main
+    inputs:
+      - filtered.vcf
+    outputs:
+      - id: upset.pdf
+        path: "{name}/upset.pdf"
+    
+  - id: somatic_detection_collector
+    name: "Somatic detection summary"
+    software_environment: r_plot_env
+    repository:
+      url: https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench
+      commit: main
+    parameters:
+      - values:
+          - "--task"
+          - "somatic_detection_collector"
+    inputs:
+      - somatic_detection.csv
+    outputs:
+      - id: somatic_detection_merged.csv
+        path: "{name}/somatic_detection_merged.csv"
+
+  - id: alignment_qc_collector
+    name: "Alignment QC summary"
+    software_environment: r_plot_env
+    repository:
+      url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+      commit: "main"
+    inputs:
+      - alignment_qc.csv
+    outputs:
+      - id: alignment_qc_merged.csv
+        path: "{name}/alignment_qc_merged.csv"

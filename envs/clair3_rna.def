@@ -1,0 +1,20 @@
+Bootstrap: localimage
+From: /home/jiayiwang/tools/clair3-rna-latest.simg
+
+%post
+    /opt/conda/bin/conda install -y git
+
+    mkdir -p /opt/ob_python/bin
+    mkdir -p /opt/ob_python/lib
+
+    ln -sf /mnt/snakemake_searchpaths/item_3/python3 /opt/ob_python/bin/python3
+    ln -sf /mnt/snakemake_searchpaths/item_4 /opt/ob_python/lib/python3.12
+
+    cat > /usr/bin/python <<'EOF'
+#!/bin/sh
+export PYTHONHOME=/opt/ob_python
+export PATH=/opt/conda/bin:/usr/bin:$PATH
+export GIT_PYTHON_GIT_EXECUTABLE=/opt/conda/bin/git
+exec /opt/ob_python/bin/python3 "$@"
+EOF
+    chmod +x /usr/bin/python

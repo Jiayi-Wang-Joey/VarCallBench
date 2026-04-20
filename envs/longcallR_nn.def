@@ -1,0 +1,104 @@
+Bootstrap: docker
+From: ubuntu:22.04
+
+%files
+    /home/jiayiwang/miniconda3/envs/longcallRenv /opt/longcallRenv
+    /home/jiayiwang/tools/longcallR-nn /opt/longcallR-nn
+
+%environment
+    export LC_ALL=C
+    export LANG=C
+    export MODEL_DIR=/models
+    export LONGCALLR_NN_ENV=/opt/longcallRenv
+    export PATH=/usr/local/bin:/usr/bin:/bin
+    export LD_LIBRARY_PATH=/opt/longcallRenv/lib:${LD_LIBRARY_PATH:-}
+
+%post
+    set -eux
+
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        bash \
+        ca-certificates \
+        curl \
+        wget \
+        git \
+        procps \
+        gawk \
+        sed \
+        grep \
+        coreutils \
+        findutils \
+        xz-utils \
+        bzip2 \
+        gzip \
+        unzip \
+        samtools \
+        bcftools \
+        tabix \
+        python3 \
+        python3-minimal
+
+    rm -rf /var/lib/apt/lists/*
+
+    mkdir -p /usr/local/bin
+    mkdir -p /models
+    mkdir -p /opt/ob_python/bin
+    mkdir -p /opt/ob_python/lib
+
+    test -x /opt/longcallRenv/bin/python
+    test -f /opt/longcallRenv/bin/longcallR_nn
+    test -x /opt/longcallR-nn/longcallR_dp/target/release/longcallR_dp
+    test -d /opt/longcallR-nn/models
+
+    cp -a /opt/longcallR-nn/models/. /models/
+
+    sed -i '1s|^#!.*python[^ ]*|#!/opt/longcallRenv/bin/python|' /opt/longcallRenv/bin/longcallR_nn
+
+    cat > /usr/local/bin/longcallR_nn <<'EOF'
+#!/bin/sh
+unset PYTHONHOME
+unset PYTHONPATH
+export MODEL_DIR=/models
+export PATH=/opt/longcallRenv/bin:/usr/local/bin:/usr/bin:/bin
+export LD_LIBRARY_PATH=/opt/longcallRenv/lib:${LD_LIBRARY_PATH:-}
+exec /opt/longcallRenv/bin/python /opt/longcallRenv/bin/longcallR_nn "$@"
+EOF
+    chmod +x /usr/local/bin/longcallR_nn
+
+    cat > /usr/local/bin/longcallR_dp <<'EOF'
+#!/bin/sh
+unset PYTHONHOME
+unset PYTHONPATH
+export PATH=/opt/longcallRenv/bin:/usr/local/bin:/usr/bin:/bin
+export LD_LIBRARY_PATH=/opt/longcallRenv/lib:${LD_LIBRARY_PATH:-}
+exec /opt/longcallR-nn/longcallR_dp/target/release/longcallR_dp "$@"
+EOF
+    chmod +x /usr/local/bin/longcallR_dp
+
+    cat > /usr/local/bin/python <<'EOF'
+#!/bin/sh
+if [ -x /mnt/snakemake_searchpaths/item_3/python3 ] && [ -d /mnt/snakemake_searchpaths/item_4 ]; then
+    export PYTHONHOME=/opt/ob_python
+    export PATH=/usr/bin:/bin:$PATH
+    exec /opt/ob_python/bin/python3 "$@"
+else
+    exec /usr/bin/python3 "$@"
+fi
+EOF
+    chmod +x /usr/local/bin/python
+
+    cat > /usr/local/bin/python3 <<'EOF'
+#!/bin/sh
+if [ -x /mnt/snakemake_searchpaths/item_3/python3 ] && [ -d /mnt/snakemake_searchpaths/item_4 ]; then
+    export PYTHONHOME=/opt/ob_python
+    export PATH=/usr/bin:/bin:$PATH
+    exec /opt/ob_python/bin/python3 "$@"
+else
+    exec /usr/bin/python3 "$@"
+fi
+EOF
+    chmod +x /usr/local/bin/python3
+
+    ln -sf /mnt/snakemake_searchpaths/item_3/python3 /opt/ob_python/bin/python3
+    ln -sf /mnt/snakemake_searchpaths/item_4 /opt/ob_python/lib/python3.12

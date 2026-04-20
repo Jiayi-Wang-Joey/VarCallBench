@@ -1,0 +1,26 @@
+Bootstrap: docker
+From: mambaorg/micromamba:1.5.8
+
+%post
+    micromamba install -y -n base -c conda-forge -c bioconda \
+        python=3.12 \
+        git \
+        bcftools \
+        bedtools \
+        htslib \
+        tabix \
+        bash \
+        coreutils \
+        gawk \
+        sed \
+        grep \
+        findutils
+
+    micromamba clean -a -y
+
+%environment
+    # Ensure conda tools are available
+    export PATH=/opt/conda/bin:/usr/bin:/bin:$PATH
+
+    # Fix GitPython error
+    export GIT_PYTHON_GIT_EXECUTABLE=/opt/conda/bin/git

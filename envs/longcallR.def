@@ -1,0 +1,45 @@
+Bootstrap: docker
+From: python:3.12-slim-bookworm
+
+%files
+    /home/jiayiwang/tools/longcallR/longcallR /usr/local/bin/longcallR
+
+%post
+    set -eux
+
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        git \
+        samtools \
+        bcftools \
+        tabix \
+        libbz2-1.0 \
+        liblzma5 \
+        libcurl4 \
+        libstdc++6
+    rm -rf /var/lib/apt/lists/*
+
+    chmod +x /usr/local/bin/longcallR
+
+    command -v python
+    command -v git
+    command -v samtools
+    command -v bcftools
+    command -v tabix
+    /usr/local/bin/longcallR -h >/dev/null || true
+
+%environment
+    export PATH=/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin
+
+%runscript
+    exec /usr/local/bin/longcallR "$@"
+
+%test
+    set -eux
+    python --version
+    git --version
+    samtools --version
+    bcftools --version
+    tabix --version
+    /usr/local/bin/longcallR -h

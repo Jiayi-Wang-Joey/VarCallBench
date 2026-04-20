@@ -1,0 +1,28 @@
+Bootstrap: docker
+From: python:3.12-slim
+
+%files
+    /home/jiayiwang/apptainer/bin/apptainer /usr/bin/apptainer
+    /home/jiayiwang/apptainer/etc/apptainer/apptainer.conf /usr/etc/apptainer/apptainer.conf
+
+%post
+    apt-get update && apt-get install -y \
+        curl unzip less groff git \
+        squashfs-tools \
+        fuse2fs \
+        fuse
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+    unzip /tmp/awscliv2.zip -d /tmp
+    /tmp/aws/install
+    rm -rf /tmp/awscliv2.zip /tmp/aws
+    mkdir -p /usr/etc/apptainer
+    ln -sf /usr/bin/apptainer /usr/bin/singularity
+
+%test
+    python --version
+    git --version
+    singularity --version
+    which unsquashfs
+
+%runscript
+    exec "$@"

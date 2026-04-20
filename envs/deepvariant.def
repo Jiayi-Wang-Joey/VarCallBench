@@ -1,0 +1,38 @@
+Bootstrap: docker
+From: google/deepvariant:1.9.0
+
+%post
+    apt-get update && apt-get install -y \
+        git \
+        samtools \
+        && apt-get clean \
+        && rm -rf /var/lib/apt/lists/*
+
+    mkdir -p /opt/ob_python/bin
+    mkdir -p /opt/ob_python/lib
+
+    rm -f /opt/ob_python/bin/python \
+          /opt/ob_python/bin/python3 \
+          /opt/ob_python/bin/python3.real \
+          /opt/ob_python/bin/ob-python
+
+    ln -sf /mnt/snakemake_searchpaths/item_3/python3 /opt/ob_python/bin/python3.real
+    ln -sf /mnt/snakemake_searchpaths/item_4 /opt/ob_python/lib/python3.12
+
+    cat > /opt/ob_python/bin/ob-python <<'EOF'
+#!/bin/sh
+export PYTHONHOME=/opt/ob_python
+export GIT_PYTHON_GIT_EXECUTABLE=/usr/bin/git
+exec /opt/ob_python/bin/python3.real "$@"
+EOF
+    chmod +x /opt/ob_python/bin/ob-python
+
+    ln -sf /opt/ob_python/bin/ob-python /opt/ob_python/bin/python
+    ln -sf /opt/ob_python/bin/ob-python /opt/ob_python/bin/python3
+
+%environment
+    export LC_ALL=C
+    export PATH=/opt/ob_python/bin:/opt/deepvariant/bin:/usr/bin:$PATH
+
+%runscript
+    exec /opt/deepvariant/bin/run_deepvariant "$@"

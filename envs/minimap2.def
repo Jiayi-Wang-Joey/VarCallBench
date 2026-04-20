@@ -1,0 +1,16 @@
+Bootstrap: docker
+From: continuumio/miniconda3
+
+%post
+    conda install -y -c bioconda -c conda-forge \
+        minimap2=2.28 \
+        samtools \
+        python=3.12 \
+        git
+    conda clean -a -y
+
+%test
+    minimap2 --version
+    samtools --version
+    python --version
+    git --version

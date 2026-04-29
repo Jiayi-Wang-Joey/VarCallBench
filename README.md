@@ -6,7 +6,7 @@ including lrRNA-seq data from the H211 and H526 cell lines generated with PacBio
 The workflow is implemented using [Omnibenchmark](https://omnibenchmark.org/).
 
 ### Reproduction
-To reproduce the results, you first need to create the apptainer image from the `envs/*.def` files. 
+To reproduce the results, you first need to create the apptainer image (`sif`) from the `envs/*.def` files. 
 Then you run:
 
 ```bash

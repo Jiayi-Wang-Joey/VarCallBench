@@ -13,6 +13,22 @@ Then you run:
 ob run benchmark.yaml
 ```
 
+### Citation
+```bash
+@ARTICLE{Wang2026-lv,
+  title       = "Systematic benchmarking of small variant calling pipelines for
+                 long-read {RNA} sequencing data",
+  author      = "Wang, Jiayi and Robinson, Mark D",
+  journal     = "bioRxiv",
+  institution = "bioRxiv",
+  month       =  may,
+  year        =  2026
+}
+
+```
+
+### Data availability
+
 All LongBench raw sequencing files (FASTQ) are publicly available. Please refer the paper for the links. 
 The output VCFs can be found on [Zenodo](https://zenodo.org/records/19857089).
 

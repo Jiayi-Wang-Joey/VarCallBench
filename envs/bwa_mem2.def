@@ -1,0 +1,13 @@
+Bootstrap: docker
+From: continuumio/miniconda3
+
+%post
+    conda install -y -c bioconda -c conda-forge \
+        bwa-mem2=2.3 \
+        samtools \
+        python=3.12
+    conda clean -a -y
+
+%test
+    bwa-mem2 version
+    samtools --version

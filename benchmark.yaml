@@ -26,6 +26,10 @@ software_environments:
     description: "longcallR"
     apptainer: "/home/jiayiwang/VarCallbench/envs/longcallR.sif"
   
+  isolaser_env:
+    description: "isoLASER"
+    apptainer: "/home/jiayiwang/VarCallbench/envs/isolaser.sif"
+
   longcallR_nn_env:
     description: "longcallR-nn"
     apptainer: "/home/jiayiwang/VarCallbench/envs/longcallR_nn.sif"
@@ -38,15 +42,198 @@ software_environments:
     description: "R plot"
     apptainer: "/home/jiayiwang/VarCallbench/envs/r_plot.sif"
 
+  sratoolkit_env:
+    description: "SRA Toolkit for downloading WGS data"
+    apptainer: "/home/jiayiwang/VarCallbench/envs/sratoolkit.sif"
+
+  bwa_mem2_env:
+    description: "bwa-mem2 (WGS short-read alignment)"
+    apptainer: "/home/jiayiwang/VarCallbench/envs/bwa_mem2.sif"
+
+  gatk_env:
+    description: "GATK4 (+ bundled samtools/bcftools) for WGS germline ground truth"
+    apptainer: "/home/jiayiwang/VarCallbench/envs/gatk.sif"
+
+  mosdepth_env:
+    description: "mosdepth (coverage depth)"
+    apptainer: "/home/jiayiwang/VarCallbench/envs/mosdepth.sif"
+
+  happy_env:
+    description: "hap.py (+ bundled samtools/bcftools/bedtools)"
+    apptainer: "/home/jiayiwang/VarCallbench/envs/happy.sif"
+
 
 stages:
+  - id: wgs_download
+    modules:
+      - id: H211_WGS
+        name: "H211_WGS"
+        software_environment: sratoolkit_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - values: ["--srr", "SRR8652057", "--threads", "4"]
+
+      - id: H526_WGS
+        name: "H526_WGS"
+        software_environment: sratoolkit_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - values: ["--srr", "SRR8670693", "--threads", "4"]
+
+    outputs:
+      - id: wgs_R1.fastq
+        path: "{dataset}_R1.fastq.gz"
+      - id: wgs_R2.fastq
+        path: "{dataset}_R2.fastq.gz"
+
+  - id: wgs_align
+    modules:
+      - id: bwa_mem2
+        name: "bwa-mem2"
+        software_environment: bwa_mem2_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - values: [
+              "--task", "wgs_align",
+              "--reference_genome", "/home/jiayiwang/VarCallbench/data/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta",
+              "--threads", "10"
+            ]
+    inputs: ["wgs_R1.fastq", "wgs_R2.fastq"]
+    outputs:
+      - id: wgs_align.sam
+        path: "{dataset}.aligned.sam"
+
+  - id: wgs_markdup
+    modules:
+      - id: markdup
+        name: "GATK MarkDuplicates"
+        software_environment: gatk_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - values: [
+              "--task", "wgs_markdup",
+              "--threads", "10"
+            ]
+    inputs: ["wgs_align.sam"]
+    outputs:
+      - id: wgs_markdup.bam
+        path: "{dataset}.dedup.bam"
+
+  - id: wgs_bqsr
+    modules:
+      - id: bqsr
+        name: "GATK BQSR"
+        software_environment: gatk_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - values: [
+              "--task", "wgs_bqsr",
+              "--reference_genome", "/home/jiayiwang/VarCallbench/data/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta",
+              "--known_sites_dbsnp", "/home/jiayiwang/VarCallbench/data/gatk_resources/Homo_sapiens_assembly38.dbsnp138.vcf.gz",
+              "--known_sites_mills", "/home/jiayiwang/VarCallbench/data/gatk_resources/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz"
+            ]
+    inputs: ["wgs_markdup.bam"]
+    outputs:
+      - id: wgs_bqsr.bam
+        path: "{dataset}.recal.bam"
+
+  - id: wgs_haplotypecaller
+    modules:
+      - id: haplotypecaller
+        name: "GATK HaplotypeCaller"
+        software_environment: gatk_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - values: [
+              "--task", "wgs_haplotypecaller",
+              "--reference_genome", "/home/jiayiwang/VarCallbench/data/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta"
+            ]
+    inputs: ["wgs_bqsr.bam"]
+    outputs:
+      - id: wgs_haplotypecaller.g.vcf.gz
+        path: "{dataset}.g.vcf.gz"
+
+  - id: wgs_genotypegvcfs
+    modules:
+      - id: genotypegvcfs
+        name: "GATK GenotypeGVCFs"
+        software_environment: gatk_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - values: [
+              "--task", "wgs_genotypegvcfs",
+              "--reference_genome", "/home/jiayiwang/VarCallbench/data/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta"
+            ]
+    inputs: ["wgs_haplotypecaller.g.vcf.gz"]
+    outputs:
+      - id: wgs_genotypegvcfs.vcf.gz
+        path: "{dataset}.vcf.gz"
+
+  - id: wgs_hard_filter
+    modules:
+      - id: hard_filter
+        name: "GATK hard filter"
+        software_environment: gatk_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - values: [
+              "--task", "wgs_hard_filter",
+              "--reference_genome", "/home/jiayiwang/VarCallbench/data/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta"
+            ]
+    inputs: ["wgs_genotypegvcfs.vcf.gz"]
+    outputs:
+      - id: wgs_ground_truth.vcf.gz
+        path: "{dataset}.vcf.gz"
+
+  - id: wgs_truth
+    modules:
+      - id: wgs_truth_promote
+        name: "WGS ground truth (PASS-only, staged)"
+        software_environment: gatk_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - values: [
+              "--task", "wgs_truth_promote",
+              "--truth_dir", "/home/jiayiwang/VarCallbench/data/truth"
+            ]
+    inputs: ["wgs_ground_truth.vcf.gz"]
+    outputs:
+      - id: wgs_truth.vcf.gz
+        path: "{dataset}.vcf.gz"
+
+  # PASS-filters the WGS ground truth and stages it at a stable path (data/truth/)
+  # so the RNA-seq-side hap.py stages below -- which live under a completely
+  # separate dataset root (rawdata/align/variant_call) and can't reference this
+  # stage's output via normal omnibenchmark input wiring -- can pick it up as a
+  # static param, keyed off the sample prefix shared between H211_WGS/H526_WGS
+  # and H211_bulk_PB/H526_dRNA_ONT/etc.
+
+
   - id: rawdata
     modules:
       - id: H211_bulk_PB
         name: "H211_bulk_PB"
         software_environment: downloader
         repository:
-          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
           commit: "main"
         parameters:
           - values: ["--s3_url", "s3://longbench-data/raw/fastq/H211_bulk_PB.fastq.gz"]
@@ -55,7 +242,7 @@ stages:
         name: "H211_bulk_ONT"
         software_environment: downloader
         repository:
-          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
           commit: "main"
         parameters:
           - values: ["--s3_url", "s3://longbench-data/raw/fastq/H211_bulk_ONT.fastq.gz"]
@@ -65,7 +252,7 @@ stages:
         name: "H211_dRNA_ONT"
         software_environment: downloader
         repository:
-          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
           commit: "main"
         parameters:
           - values: ["--s3_url", "s3://longbench-data/raw/fastq/H211_bulk_ONT.fastq.gz"]
@@ -75,7 +262,7 @@ stages:
         name: "H526_bulk_PB"
         software_environment: downloader
         repository:
-          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
           commit: "main"
         parameters:
           - values: ["--s3_url", "s3://longbench-data/raw/fastq/H526_bulk_PB.fastq.gz"]
@@ -84,7 +271,7 @@ stages:
         name: "H526_bulk_ONT"
         software_environment: downloader
         repository:
-          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
           commit: "main"
         parameters:
           - values: ["--s3_url", "s3://longbench-data/raw/fastq/H526_bulk_ONT.fastq.gz"]
@@ -94,7 +281,7 @@ stages:
         name: "H526_dRNA_ONT"
         software_environment: downloader
         repository:
-          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
           commit: "main"
         parameters:
           - values: ["--s3_url", "s3://longbench-data/raw/fastq/H526_dRNA_ONT.fastq.gz"]
@@ -109,7 +296,7 @@ stages:
         name: "minimap2"
         software_environment: minimap2_env
         repository:
-          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
           commit: "main"
         parameters:
           - values: [
@@ -131,7 +318,7 @@ stages:
         name: "Alignment QC"
         software_environment: minimap2_env
         repository:
-          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
           commit: "main"
         parameters:
           - values:
@@ -144,13 +331,81 @@ stages:
       - id: alignment_qc.csv
         path: "{dataset}.alignment_qc.csv"
 
+  - id: isolaser_annotate
+    modules:
+      - id: isolaser_annotate
+        name: "isoLASER annotate"
+        software_environment: isolaser_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - values:
+              - "--task"
+              - "isolaser_annotate"
+              - "--transcriptome_fa"
+              - "/home/jiayiwang/VarCallbench/data/isolaser/transcriptome.fa"
+              - "--gtf"
+              - "/home/jiayiwang/VarCallbench/data/isolaser/filtered.gtf.gz"
+              - "--threads"
+              - "10"
+    inputs: ["align.bam"]
+    outputs:
+      - id: isolaser_annotate.bam
+        path: "{dataset}.anno.bam"
+
+  - id: isolaser_call
+    modules:
+      - id: isolaser
+        name: "isoLASER call"
+        software_environment: isolaser_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - values:
+              - "--task"
+              - "isolaser_run"
+              - "--reference_genome"
+              - "/home/jiayiwang/VarCallbench/data/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta"
+              - "--gtf"
+              - "/home/jiayiwang/VarCallbench/data/isolaser/filtered.gtf.gz"
+              - "--transcriptome_db"
+              - "/home/jiayiwang/VarCallbench/data/isolaser/transcriptome.db"
+              - "--threads"
+              - "10"
+    inputs: ["isolaser_annotate.bam"]
+    outputs:
+      - id: isolaser.vcf
+        path: "{dataset}.vcf.gz"
+
+  # isoLASER-specific post-filtering per the author's own evaluation criteria
+  # (allelic ratio > 25%, GQ > 25, top-2-alleles-per-position for multi-candidate
+  # sites). 
+  - id: isolaser_filter
+    modules:
+      - id: isolaser_filter
+        name: "isoLASER author-recommended filter"
+        software_environment: gnomad_detection_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - values:
+              - "--task"
+              - "isolaser_filter"
+    inputs: ["isolaser.vcf"]
+    outputs:
+      - id: isolaser_filtered.vcf
+        path: "{dataset}.vcf.gz"
+
   - id: variant_call
     modules:
       - id: clair3_rna
         name: "Clair3-RNA"
         software_environment: clair3_rna_env
         repository:
-          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
           commit: "main"
         parameters:
           - values:
@@ -165,7 +420,7 @@ stages:
         name: "DeepVariant"
         software_environment: deepvariant_env
         repository:
-          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
           commit: "main"
         parameters:
           - values:
@@ -180,7 +435,7 @@ stages:
         name: "longcallR"
         software_environment: longcallR_env
         repository:
-          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
           commit: "main"
         parameters:
           - values:
@@ -195,7 +450,7 @@ stages:
         name: "longcallR-nn"
         software_environment: longcallR_nn_env
         repository:
-          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
           commit: "main"
         parameters:
           - values:
@@ -213,87 +468,303 @@ stages:
         path: "{dataset}.vcf.gz"
 
 
-  - id: somatic_detection
+  # generate_bed is split into 3 stages because indexing (samtools), coverage
+  # (mosdepth), and merging (bedtools/awk) each need a different container, and
+  # nesting `apptainer exec` calls inside an already-containerized module script
+  # doesn't work (the inner apptainer binary isn't present in the outer image).
+  - id: generate_bed_variant_call_bam_index
     modules:
-      - id: somatic_detection
-        name: "Somatic detection"
-        software_environment: gnomad_detection_env
+      - id: bam_index
+        name: "Index alignment BAM (variant_call callers)"
+        software_environment: minimap2_env
         repository:
-          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
           commit: "main"
         parameters:
-          - values:
-              - "--task"
-              - "somatic_detection"
-              - "--somatic_dir"
-              - "/home/jiayiwang/VarCallbench/data/somatic"
-              - "--exon_bed"
-              - "/home/jiayiwang/VarCallbench/data/genome/exons.bed"
-    inputs: ["variant.vcf"]
+          - task: bam_index
+    inputs: ["align.bam", "variant.vcf"]
     outputs:
-      - id: somatic_detection.csv
-        path: "{dataset}.somatic_detection.csv"
+      - id: generate_bed_variant_call_bam_index.bam
+        path: "{dataset}.bam"
 
-
-  - id: filter_variants
+  - id: generate_bed_variant_call_mosdepth
     modules:
-      - id: filter_variants
-        name: "Filter variants"
-        software_environment: gnomad_detection_env
+      - id: mosdepth_coverage
+        name: "mosdepth coverage (variant_call callers)"
+        software_environment: mosdepth_env
         repository:
-          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
           commit: "main"
         parameters:
-          - values:
-              - "--task"
-              - "filter_variants"
-              - "--annotation_bed"
-              - "/home/jiayiwang/VarCallbench/data/genome/gencode.v47.chr_patch_hapl_scaff.annotation.bed"
-    inputs: ["variant.vcf"]
+          - task: mosdepth_coverage
+            threads: 8
+    inputs: ["generate_bed_variant_call_bam_index.bam"]
     outputs:
-      - id: filtered.vcf
-        path: "{dataset}.vcf.gz"
+      - id: generate_bed_variant_call_mosdepth.coverage.bed.gz
+        path: "{dataset}.per-base.bed.gz"
 
-  
+  - id: generate_bed_variant_call
+    modules:
+      - id: generate_bed
+        name: "Coverage-filtered exon BED (variant_call callers)"
+        software_environment: gnomad_detection_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - task: generate_bed
+            gtf: "/home/jiayiwang/VarCallbench/data/genome/gencode.v47.chr_patch_hapl_scaff.annotation.sorted.gtf"
+            min_coverage: [1, 5, 10, 30, 50, 100]
+    inputs: ["generate_bed_variant_call_mosdepth.coverage.bed.gz"]
+    outputs:
+      - id: generate_bed_variant_call.bed
+        path: "{dataset}.bed"
 
+  - id: generate_bed_isolaser_bam_index
+    modules:
+      - id: bam_index
+        name: "Index alignment BAM (isoLASER)"
+        software_environment: minimap2_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - task: bam_index
+    inputs: ["align.bam", "isolaser_filtered.vcf"]
+    outputs:
+      - id: generate_bed_isolaser_bam_index.bam
+        path: "{dataset}.bam"
+
+  - id: generate_bed_isolaser_mosdepth
+    modules:
+      - id: mosdepth_coverage
+        name: "mosdepth coverage (isoLASER)"
+        software_environment: mosdepth_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - task: mosdepth_coverage
+            threads: 8
+    inputs: ["generate_bed_isolaser_bam_index.bam"]
+    outputs:
+      - id: generate_bed_isolaser_mosdepth.coverage.bed.gz
+        path: "{dataset}.per-base.bed.gz"
+
+  - id: generate_bed_isolaser
+    modules:
+      - id: generate_bed
+        name: "Coverage-filtered exon BED (isoLASER)"
+        software_environment: gnomad_detection_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - task: generate_bed
+            gtf: "/home/jiayiwang/VarCallbench/data/genome/gencode.v47.chr_patch_hapl_scaff.annotation.sorted.gtf"
+            min_coverage: [1, 5, 10, 30, 50, 100]
+    inputs: ["generate_bed_isolaser_mosdepth.coverage.bed.gz"]
+    outputs:
+      - id: generate_bed_isolaser.bed
+        path: "{dataset}.bed"
+
+
+  # hap.py vs WGS ground truth for the 4 variant_call callers. No coverage
+  # parameter here: since this stage depends on generate_bed_variant_call (which
+  # already expanded into 6 coverage-tier nodes, nested per tool), omnibenchmark
+  # naturally invokes this once per (tool x coverage) combination, correctly
+  # paired -- see the comment on generate_bed_variant_call above.
+  - id: happy_variant_call
+    modules:
+      - id: happy_benchmark
+        name: "hap.py vs WGS truth (variant_call callers)"
+        software_environment: happy_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - values: [
+              "--task", "happy_benchmark",
+              "--truth_dir", "/home/jiayiwang/VarCallbench/data/truth",
+              "--reference_genome", "/home/jiayiwang/VarCallbench/data/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta",
+              "--threads", "10"
+            ]
+    inputs: ["variant.vcf", "generate_bed_variant_call.bed"]
+    outputs:
+      - id: happy_variant_call.csv
+        path: "{dataset}.happy_summary.csv"
+
+  # Same as happy_variant_call, but for isoLASER -- kept as a separate stage since
+  # a stage's inputs are an AND (both variant.vcf and isolaser.vcf would need to
+  # exist simultaneously for a single invocation, which isn't what we want).
+  - id: happy_isolaser
+    modules:
+      - id: happy_benchmark
+        name: "hap.py vs WGS truth (isoLASER)"
+        software_environment: happy_env
+        repository:
+          url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+          commit: "main"
+        parameters:
+          - values: [
+              "--task", "happy_benchmark",
+              "--truth_dir", "/home/jiayiwang/VarCallbench/data/truth",
+              "--reference_genome", "/home/jiayiwang/VarCallbench/data/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta",
+              "--threads", "10"
+            ]
+    inputs: ["isolaser_filtered.vcf", "generate_bed_isolaser.bed"]
+    outputs:
+      - id: happy_isolaser.csv
+        path: "{dataset}.happy_summary.csv"
+
+
+  # Disabled: gnomAD-based somatic detection is being replaced by WGS ground truth.
+  # - id: somatic_detection
+  #   modules:
+  #     - id: somatic_detection
+  #       name: "Somatic detection"
+  #       software_environment: gnomad_detection_env
+  #       repository:
+  #         url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+  #         commit: "main"
+  #       parameters:
+  #         - values:
+  #             - "--task"
+  #             - "somatic_detection"
+  #             - "--somatic_dir"
+  #             - "/home/jiayiwang/VarCallbench/data/somatic"
+  #             - "--exon_bed"
+  #             - "/home/jiayiwang/VarCallbench/data/genome/exons.bed"
+  #   inputs: ["variant.vcf"]
+  #   outputs:
+  #     - id: somatic_detection.csv
+  #       path: "{dataset}.somatic_detection.csv"
+
+
+  # Disabled: gnomAD-based filtering is being replaced by WGS ground truth.
+  # - id: filter_variants
+  #   modules:
+  #     - id: filter_variants
+  #       name: "Filter variants"
+  #       software_environment: gnomad_detection_env
+  #       repository:
+  #         url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+  #         commit: "main"
+  #       parameters:
+  #         - values:
+  #             - "--task"
+  #             - "filter_variants"
+  #             - "--annotation_bed"
+  #             - "/home/jiayiwang/VarCallbench/data/genome/gencode.v47.chr_patch_hapl_scaff.annotation.bed"
+  #   inputs: ["variant.vcf"]
+  #   outputs:
+  #     - id: filtered.vcf
+  #       path: "{dataset}.vcf.gz"
+
+  # Disabled: gnomAD-based filtering is being replaced by WGS ground truth.
+  # - id: isolaser_filter
+  #   modules:
+  #     - id: filter_variants
+  #       name: "Filter isoLASER variants"
+  #       software_environment: gnomad_detection_env
+  #       repository:
+  #         url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+  #         commit: "main"
+  #       parameters:
+  #         - id: default
+  #           values:
+  #             - "--task"
+  #             - "filter_variants"
+  #             - "--annotation_bed"
+  #             - "/home/jiayiwang/VarCallbench/data/genome/gencode.v47.chr_patch_hapl_scaff.annotation.bed"
+  #   inputs: ["isolaser.vcf"]
+  #   outputs:
+  #     - id: isolaser_filtered.vcf
+  #       path: "{dataset}.vcf.gz"
+
+
+# metric_collectors:
+#   - id: upset_collector
+#     name: "UpSet"
+#     software_environment: r_plot_env
+#     repository:
+#       url: https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git
+#       commit: main
+#     inputs:
+#       - filtered.vcf
+#     outputs:
+#       - id: upset.pdf
+#         path: "{name}/upset.pdf"
+    
+#   - id: somatic_detection_collector
+#     name: "Somatic detection summary"
+#     software_environment: r_plot_env
+#     repository:
+#       url: https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git
+#       commit: main
+#     parameters:
+#       - values:
+#           - "--task"
+#           - "somatic_detection_collector"
+#     inputs:
+#       - somatic_detection.csv
+#     outputs:
+#       - id: somatic_detection_merged.csv
+#         path: "{name}/somatic_detection_merged.csv"
+
+#   - id: alignment_qc_collector
+#     name: "Alignment QC summary"
+#     software_environment: r_plot_env
+#     repository:
+#       url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+#       commit: "main"
+#     inputs:
+#       - alignment_qc.csv
+#     outputs:
+#       - id: alignment_qc_merged.csv
+#         path: "{name}/alignment_qc_merged.csv"
+
+# Disabled: depended on filtered.vcf/isolaser_filtered.vcf from the now-disabled
+# gnomAD-based filter_variants/isolaser_filter stages. Being replaced by a WGS
+# ground-truth-based collector.
+# metric_collectors:
+#   - id: cross_platform_summary_collector
+#     name: "Cross-platform summary"
+#     software_environment: r_plot_env
+#     repository:
+#       url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
+#       commit: "main"
+#     parameters:
+#       - id: default
+#         values:
+#           - "--task"
+#           - "cross_platform_summary_collector"
+#     inputs:
+#       - filtered.vcf
+#       - isolaser_filtered.vcf
+#     outputs:
+#       - id: cross_platform_summary.csv
+#         path: "{name}/cross_platform_summary.csv"
+#       - id: cross_platform_detail_summary.csv
+#         path: "{name}/cross_platform_detail_summary.csv"
+#       - id: cross_platform_variant_table.csv
+#         path: "{name}/cross_platform_variant_table.csv"
 
 metric_collectors:
-  - id: upset_collector
-    name: "UpSet"
+  - id: happy_summary_collector
+    name: "hap.py summary (all callers, all coverage cutoffs)"
     software_environment: r_plot_env
     repository:
-      url: https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench
-      commit: main
-    inputs:
-      - filtered.vcf
-    outputs:
-      - id: upset.pdf
-        path: "{name}/upset.pdf"
-    
-  - id: somatic_detection_collector
-    name: "Somatic detection summary"
-    software_environment: r_plot_env
-    repository:
-      url: https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench
-      commit: main
-    parameters:
-      - values:
-          - "--task"
-          - "somatic_detection_collector"
-    inputs:
-      - somatic_detection.csv
-    outputs:
-      - id: somatic_detection_merged.csv
-        path: "{name}/somatic_detection_merged.csv"
-
-  - id: alignment_qc_collector
-    name: "Alignment QC summary"
-    software_environment: r_plot_env
-    repository:
-      url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench"
+      url: "https://github.com/Jiayi-Wang-Joey/VarCallbench-longBench.git"
       commit: "main"
+    parameters:
+      - id: default
+        values:
+          - "--task"
+          - "happy_summary_collector"
     inputs:
-      - alignment_qc.csv
+      - happy_variant_call.csv
+      - happy_isolaser.csv
     outputs:
-      - id: alignment_qc_merged.csv
-        path: "{name}/alignment_qc_merged.csv"
+      - id: happy_summary_merged.csv
+        path: "{name}/happy_summary_merged.csv"

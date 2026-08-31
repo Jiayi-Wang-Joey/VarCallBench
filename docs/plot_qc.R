@@ -4,14 +4,14 @@ suppressPackageStartupMessages({
     library(ggh4x)
     library(tidytext)
 })
-setwd("/Volumes/jiayiwang/VarCallbench/")
+setwd("~/Desktop/roland/VarCallbench/")
 dt <- fread("out/alignment_qc_collector/alignment_qc_merged.csv")
 dt[, dataset_id := fcase(
     dataset_id == "H526_dRNA_ONT", "H526-dRNA004",
-    dataset_id == "H526_bulk_PB",  "H526-Kinnex",
+    dataset_id == "H526_bulk_PB",  "H526-MasSeq",
     dataset_id == "H526_bulk_ONT", "H526-cDNAxR10",
     dataset_id == "H211_dRNA_ONT", "H211-dRNA004",
-    dataset_id == "H211_bulk_PB",  "H211-Kinnex",
+    dataset_id == "H211_bulk_PB",  "H211-MasSeq",
     dataset_id == "H211_bulk_ONT", "H211-cDNAxR10",
     default = dataset_id
 )]
@@ -23,14 +23,14 @@ metrics <- c(
     "mapped_reads",
     "mapping_rate_pct",
     "average_length",
-    "average_quality",
+    #"average_quality",
     "error_rate"
 )
 
 pal <- c(
     "dRNA004" = "#fec44f",
     "cDNAxR10" = "#d95f0e",
-    "Kinnex" = "#54278f"
+    "MasSeq" = "#54278f"
 )
 
 dt_long <- melt(
@@ -52,8 +52,8 @@ dt_long[, value_scaled := fcase(
 
 dt_long[, metric := factor(metric,
                            levels = metrics,
-                           labels = c("Total sequences", "Mapped reads", "Mapping rate", 
-                                      "Read length", "Average quality", "Error rate")
+                           labels = c("Total reads (M)", "Mapped reads (M)", "Mapping rate (%)", 
+                                      "Average Read length", "Error rate (%)")
 )]
 
 
@@ -79,4 +79,4 @@ gg <- ggplot(dt_long, aes(reorder_within(tech, value, facet_group),
     aes +
     labs(x = NULL, y = "Value", fill = "Technology")
 
-ggsave("plts/qual.pdf", gg, width=28, height=8, units="cm")
+ggsave("plts/qual.pdf", gg, width=23.5, height=8, units="cm")

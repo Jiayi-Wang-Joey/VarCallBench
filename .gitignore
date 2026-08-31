@@ -20,3 +20,9 @@ envs/**/*.simg
 envs/._*
 envs/**/*.sif
 envs/*.sif
+docs/sbatch*
+._*
+*sh
+*log*
+*LongBench*
+test*

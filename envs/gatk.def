@@ -1,0 +1,13 @@
+Bootstrap: docker
+From: continuumio/miniconda3
+
+%post
+    conda install -y -c bioconda -c conda-forge \
+        gatk4=4.6.1.0 \
+        samtools \
+        python=3.12
+    conda clean -a -y
+
+%test
+    gatk --version
+    samtools --version
